@@ -1411,19 +1411,21 @@ static int s3_compress_parquet(struct flb_s3 *ctx,
     int fdout = -1;
     flb_sds_t parquet_buf;
 
-    parquet_cmd = flb_sds_create_size(384);
+    parquet_cmd = flb_sds_create_size(256);
     if (parquet_cmd == NULL) {
         goto error;
     }
 
     strncpy(infile, template_in, 32);
-    if (!flb_mkstemp(infile)) {
+    if (mkstemp(infile) == -1) {
+        flb_errno();
         ret = -2;
         goto error;
     }
 
     strncpy(outfile, template_out, 32);
-    if (!flb_mkstemp(outfile)) {
+    if (mkstemp(outfile) == -1) {
+        flb_errno();
         ret = -2;
         goto error;
     }
@@ -1436,7 +1438,7 @@ static int s3_compress_parquet(struct flb_s3 *ctx,
 
     read_ptr = fopen(outfile, "rb");
     if (read_ptr == NULL) {
-        ret = -3;
+        ret = -4;
         goto error;
     }
 
@@ -1448,9 +1450,10 @@ static int s3_compress_parquet(struct flb_s3 *ctx,
 
     bytes = fwrite(body, body_size, 1, write_ptr);
     if (bytes == -1) {
-        ret = -4;
+        ret = -5;
         goto error;
     }
+    fclose(write_ptr);
 
     ret = build_columnify_command(ctx, infile, outfile, &parquet_cmd);
     if (ret != 0) {
@@ -1463,11 +1466,10 @@ static int s3_compress_parquet(struct flb_s3 *ctx,
         flb_plg_error(ctx->ins, "command %s failed", DEFAULT_PARQUET_COMMAND_EXISTENCE);
         return -1;
     }
-    fclose(write_ptr);
     flb_pclose(cmdp);
 
     if (fstat(fdout, &stbuf) == -1) {
-        ret = -4;
+        ret = -6;
         goto error;
     }
     parquet_size = stbuf.st_size;
@@ -1484,6 +1486,7 @@ static int s3_compress_parquet(struct flb_s3 *ctx,
         ret = -6;
         flb_plg_warn(ctx->ins, "unlink %s is failed", outfile);
     }
+
     fclose(read_ptr);
 
     *payload_buf = parquet_buf;
