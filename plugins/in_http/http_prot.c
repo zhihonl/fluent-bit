@@ -677,13 +677,25 @@ static ssize_t parse_payload_msgpack_ng(flb_sds_t tag,
             return -1;
         }
 
-        if (tag_from_record) {
+        /* submit each record separately when the tag is extracted from the record. */
+        if (ctx->tag_key) {
             ret = flb_input_log_append(ctx->ins, tag_from_record,
                                        flb_sds_len(tag_from_record),
                                        ctx->log_encoder.output_buffer,
                                        ctx->log_encoder.output_length);
+
+            if (ret != FLB_EVENT_ENCODER_SUCCESS) {
+                    flb_plg_error(ctx->ins, "unable to append incoming record: %d", ret);
+                    flb_log_event_decoder_destroy(&log_decoder);
+                    return -1;
+            }
+
+            flb_log_event_encoder_reset(&ctx->log_encoder);
         }
-        else if (tag) {
+    }
+
+    if (!ctx->tag_key) {
+        if (tag) {
             ret = flb_input_log_append(ctx->ins, tag, flb_sds_len(tag),
                                        ctx->log_encoder.output_buffer,
                                        ctx->log_encoder.output_length);
@@ -693,14 +705,6 @@ static ssize_t parse_payload_msgpack_ng(flb_sds_t tag,
                                        ctx->log_encoder.output_buffer,
                                        ctx->log_encoder.output_length);
         }
-
-        if (ret != FLB_EVENT_ENCODER_SUCCESS) {
-            flb_plg_error(ctx->ins, "unable to append incoming record: %d", ret);
-            flb_log_event_decoder_destroy(&log_decoder);
-            return -1;
-        }
-
-        flb_log_event_encoder_reset(&ctx->log_encoder);
     }
 
     flb_log_event_decoder_destroy(&log_decoder);
