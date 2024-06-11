@@ -504,6 +504,10 @@ void flb_test_http_failure_400_bad_disk_write()
     struct flb_lib_out_cb cb_data;
     struct test_ctx *ctx;
     struct flb_http_client *c;
+    const char *tmpdir;
+    const char *storage_name = "http-input-test-404-bad-write";
+    flb_sds_t storage_path;
+    flb_sds_t storage_path_http_0;
     int ret;
     size_t b_sent;
 
@@ -520,8 +524,35 @@ void flb_test_http_failure_400_bad_disk_write()
         exit(EXIT_FAILURE);
     }
 
+    tmpdir = getenv("TMPDIR");
+    if (tmpdir == NULL || strlen(tmpdir) == 0) {
+        tmpdir = "/tmp/";
+    }
+
+    storage_path = flb_sds_create_size(strlen(tmpdir) + strlen(storage_name));
+    if (!TEST_CHECK(storage_path != NULL)) {
+        exit(EXIT_FAILURE);
+    }
+    if (!TEST_CHECK(flb_sds_cat_safe(&storage_path, tmpdir, strlen(tmpdir)) == 0)) {
+        exit(EXIT_FAILURE);
+    }
+    if (!TEST_CHECK(flb_sds_cat_safe(&storage_path, storage_name, strlen(storage_name)) == 0)) {
+        exit(EXIT_FAILURE);
+    }
+
+    storage_path_http_0 = flb_sds_create_size(strlen(storage_path) + strlen("/http.0"));
+    if (!TEST_CHECK(storage_path_http_0 != NULL)) {
+        exit(EXIT_FAILURE);
+    }
+    if (!TEST_CHECK(flb_sds_cat_safe(&storage_path_http_0, storage_path, strlen(storage_path)) == 0)) {
+        exit(EXIT_FAILURE);
+    }
+    if (!TEST_CHECK(flb_sds_cat_safe(&storage_path_http_0, "/http.0", strlen("/http.0")) == 0)) {
+        exit(EXIT_FAILURE);
+    }
+
     ret = flb_service_set(ctx->flb,
-                          "storage.path", "/tmp/http-input-test-404-bad-write",
+                          "storage.path", storage_path,
                           NULL);
     TEST_CHECK(ret == 0);
 
@@ -542,7 +573,7 @@ void flb_test_http_failure_400_bad_disk_write()
 
     flb_time_msleep(5000);
 
-    ret = chmod("/tmp/http-input-test-404-bad-write", 000);
+    ret = chmod(storage_path, 000);
     TEST_CHECK(ret == 0);
 
     ctx->httpc = http_client_ctx_create();
@@ -569,11 +600,10 @@ void flb_test_http_failure_400_bad_disk_write()
         TEST_MSG("http response code error. expect: %d, got: %d\n", 400, c->resp.status);
     }
 
-    chmod("/tmp/http-input-test-404-bad-write/http.0", 0700);
-    rmdir("/tmp/http-input-test-404-bad-write/http.0");
-
-    chmod("/tmp/http-input-test-404-bad-write", 0700);
-    rmdir("/tmp/http-input-test-404-bad-write");
+    chmod(storage_path, 0700);
+    chmod(storage_path_http_0, 0700);
+    rmdir(storage_path_http_0);
+    rmdir(storage_path);
 
     /* waiting to flush */
     flb_time_msleep(1500);
@@ -581,6 +611,8 @@ void flb_test_http_failure_400_bad_disk_write()
     flb_http_client_destroy(c);
     flb_upstream_conn_release(ctx->httpc->u_conn);
     test_ctx_destroy(ctx);
+    flb_sds_destroy(storage_path);
+    flb_sds_destroy(storage_path_http_0);
 }
 
 void flb_test_http_tag_key()
